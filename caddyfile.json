@@ -1,0 +1,277 @@
+{
+    "apps": {
+        "http": {
+            "servers": {
+                ":1444": {
+                    "automatic_https": {
+                        "disable": true
+                    },
+                    "listen": [
+                        ":1444"
+                    ],
+                    "routes": [
+                        {
+                            "handle": [
+                                {
+                                    "handler": "subroute",
+                                    "routes": [
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "headers",
+                                                    "request": {
+                                                        "set": {
+                                                            "X-KB-ID": [
+                                                                "5f61b60d-f840-443c-ac4c-17721ff60244"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "flush_interval": -1,
+                                                    "handler": "reverse_proxy",
+                                                    "transport": {
+                                                        "protocol": "http",
+                                                        "read_timeout": "10m",
+                                                        "write_timeout": "10m"
+                                                    },
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.2:8000"
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "match": [
+                                                {
+                                                    "path": [
+                                                        "/share/v1/chat/message"
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "headers",
+                                                    "request": {
+                                                        "set": {
+                                                            "X-KB-ID": [
+                                                                "5f61b60d-f840-443c-ac4c-17721ff60244"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "handler": "reverse_proxy",
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.2:8000"
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "match": [
+                                                {
+                                                    "path": [
+                                                        "/share/v1/chat/completions",
+                                                        "/share/v1/app/wechat/app",
+                                                        "/share/v1/app/wechat/service",
+                                                        "/sitemap.xml",
+                                                        "/share/v1/app/wechat/official_account",
+                                                        "/share/v1/app/wechat/service/answer",
+                                                        "/mcp"
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "handle": [
+                                                {
+                                                    "flush_interval": -1,
+                                                    "handler": "reverse_proxy",
+                                                    "transport": {
+                                                        "protocol": "http",
+                                                        "read_timeout": "10m",
+                                                        "write_timeout": "10m"
+                                                    },
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.12:9000"
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "match": [
+                                                {
+                                                    "path": [
+                                                        "/static-file/*"
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "headers",
+                                                    "request": {
+                                                        "set": {
+                                                            "X-KB-ID": [
+                                                                "5f61b60d-f840-443c-ac4c-17721ff60244"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "handler": "reverse_proxy",
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.112:3010"
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ],
+                            "match": [
+                                {
+                                    "host": [
+                                        "192.168.10.14"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "handle": [
+                                {
+                                    "handler": "subroute",
+                                    "routes": [
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "headers",
+                                                    "request": {
+                                                        "set": {
+                                                            "X-KB-ID": [
+                                                                "5f61b60d-f840-443c-ac4c-17721ff60244"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "flush_interval": -1,
+                                                    "handler": "reverse_proxy",
+                                                    "transport": {
+                                                        "protocol": "http",
+                                                        "read_timeout": "10m",
+                                                        "write_timeout": "10m"
+                                                    },
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.2:8000"
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "match": [
+                                                {
+                                                    "path": [
+                                                        "/share/v1/chat/message"
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "headers",
+                                                    "request": {
+                                                        "set": {
+                                                            "X-KB-ID": [
+                                                                "5f61b60d-f840-443c-ac4c-17721ff60244"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "handler": "reverse_proxy",
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.2:8000"
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "match": [
+                                                {
+                                                    "path": [
+                                                        "/share/v1/chat/completions",
+                                                        "/share/v1/app/wechat/app",
+                                                        "/share/v1/app/wechat/service",
+                                                        "/sitemap.xml",
+                                                        "/share/v1/app/wechat/official_account",
+                                                        "/share/v1/app/wechat/service/answer",
+                                                        "/mcp"
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "handle": [
+                                                {
+                                                    "flush_interval": -1,
+                                                    "handler": "reverse_proxy",
+                                                    "transport": {
+                                                        "protocol": "http",
+                                                        "read_timeout": "10m",
+                                                        "write_timeout": "10m"
+                                                    },
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.12:9000"
+                                                        }
+                                                    ]
+                                                }
+                                            ],
+                                            "match": [
+                                                {
+                                                    "path": [
+                                                        "/static-file/*"
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "handle": [
+                                                {
+                                                    "handler": "headers",
+                                                    "request": {
+                                                        "set": {
+                                                            "X-KB-ID": [
+                                                                "5f61b60d-f840-443c-ac4c-17721ff60244"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "handler": "reverse_proxy",
+                                                    "upstreams": [
+                                                        {
+                                                            "dial": "169.254.15.112:3010"
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}

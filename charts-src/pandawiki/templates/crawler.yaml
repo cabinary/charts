@@ -1,0 +1,49 @@
+{{- if .Values.crawler.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "panda-wiki.fullname" . }}-crawler
+  labels:
+    {{- include "panda-wiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: crawler
+spec:
+  replicas: {{ .Values.crawler.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "panda-wiki.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: crawler
+  template:
+    metadata:
+      labels:
+        {{- include "panda-wiki.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: crawler
+    spec:
+      containers:
+        - name: crawler
+          image: {{ include "panda-wiki.image" (dict "global" .Values.global "local" .Values.crawler) | quote }}
+          env:
+            - name: GLOG_GLOBAL_LEVEL
+              value: info
+            - name: NAMESPACE
+              value: anydoc
+            - name: MQ_NATS_URL
+              value: nats://{{ include "panda-wiki.fullname" . }}-nats:4222
+            - name: MQ_NATS_USER
+              value: "panda-wiki"
+            - name: MQ_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: nats-password
+            - name: OSS_MINIO_ACCESS_KEY
+              value: {{ .Values.minio.accessKey | quote }}
+            - name: OSS_MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: s3-secret-key
+            - name: OSS_MINIO_ENDPOINT
+              value: {{ include "panda-wiki.minio.endpoint" . }}
+          resources:
+            {{- toYaml .Values.crawler.resources | nindent 12 }}
+{{- end }}

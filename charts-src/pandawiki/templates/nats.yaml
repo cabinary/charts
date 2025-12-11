@@ -1,0 +1,69 @@
+{{- if .Values.nats.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "panda-wiki.fullname" . }}-nats
+  labels:
+    {{- include "panda-wiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  replicas: {{ .Values.nats.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "panda-wiki.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats
+  template:
+    metadata:
+      labels:
+        {{- include "panda-wiki.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats
+    spec:
+      containers:
+        - name: nats
+          image: {{ include "panda-wiki.image" (dict "global" .Values.global "local" .Values.nats) | quote }}
+          command:
+            - nats-server
+            - -c
+            - /etc/nats/nats.conf
+            - --user
+            - "panda-wiki"
+            - --pass
+            - "$(NATS_PASSWORD)"
+          env:
+            - name: NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: nats-password
+          ports:
+            - containerPort: 4222
+              name: nats
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nats/nats.conf
+              subPath: nats.conf
+          resources:
+            {{- toYaml .Values.nats.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "panda-wiki.fullname" . }}-nats-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "panda-wiki.fullname" . }}-nats
+  labels:
+    {{- include "panda-wiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  type: {{ .Values.nats.service.type }}
+  ports:
+    - port: {{ .Values.nats.service.port }}
+      targetPort: nats
+      protocol: TCP
+      name: nats
+  selector:
+    {{- include "panda-wiki.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+{{- end }}

@@ -1,0 +1,56 @@
+{{- if .Values.consumer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "panda-wiki.fullname" . }}-consumer
+  labels:
+    {{- include "panda-wiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: consumer
+spec:
+  replicas: {{ .Values.consumer.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "panda-wiki.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: consumer
+  template:
+    metadata:
+      labels:
+        {{- include "panda-wiki.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: consumer
+    spec:
+      containers:
+        - name: consumer
+          image: {{ include "panda-wiki.image" (dict "global" .Values.global "local" .Values.consumer) | quote }}
+          env:
+            - name: DATABASE_HOST
+              value: {{ include "panda-wiki.postgres.host" . }}
+            - name: DATABASE_PORT
+              value: "{{ include "panda-wiki.postgres.port" . }}"
+            - name: NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: nats-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: postgres-password
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: redis-password
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: s3-secret-key
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: jwt-secret
+          resources:
+            {{- toYaml .Values.consumer.resources | nindent 12 }}
+{{- end }}

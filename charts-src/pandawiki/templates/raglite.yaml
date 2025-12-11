@@ -1,0 +1,99 @@
+{{- if .Values.raglite.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "panda-wiki.fullname" . }}-raglite
+  labels:
+    {{- include "panda-wiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: raglite
+spec:
+  serviceName: {{ include "panda-wiki.fullname" . }}-raglite
+  replicas: {{ .Values.raglite.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "panda-wiki.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: raglite
+  template:
+    metadata:
+      labels:
+        {{- include "panda-wiki.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: raglite
+    spec:
+      containers:
+        - name: raglite
+          image: {{ include "panda-wiki.image" (dict "global" .Values.global "local" .Values.raglite) | quote }}
+          env:
+            - name: GIN_MODE
+              value: release
+            - name: DATABASE_HOST
+              value: {{ include "panda-wiki.postgres.host" . }}
+            - name: DATABASE_USER
+              value: {{ .Values.postgres.username | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: postgres-password
+            - name: MINIO_HOST
+              value: {{ include "panda-wiki.minio.endpoint" . }}
+            - name: MINIO_USER
+              value: {{ .Values.minio.accessKey | quote }}
+            - name: MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: s3-secret-key
+            - name: QDRANT_HOST
+              value: {{ include "panda-wiki.fullname" . }}-qdrant
+            - name: QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: qdrant-api-key
+            - name: MQ_NATS_URL
+              value: nats://{{ include "panda-wiki.fullname" . }}-nats:4222
+            - name: MQ_NATS_USER
+              value: "panda-wiki"
+            - name: MQ_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "panda-wiki.fullname" . }}-secrets
+                  key: nats-password
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.raglite.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        {{- if .Values.raglite.storage.storageClassName }}
+        storageClassName: {{ .Values.raglite.storage.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.raglite.storage.size | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "panda-wiki.fullname" . }}-raglite
+  labels:
+    {{- include "panda-wiki.labels" . | nindent 4 }}
+    app.kubernetes.io/component: raglite
+spec:
+  type: {{ .Values.raglite.service.type }}
+  ports:
+    - port: {{ .Values.raglite.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "panda-wiki.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: raglite
+{{- end }}

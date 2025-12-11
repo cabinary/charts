@@ -1,0 +1,152 @@
+# 全局配置
+global:
+  imageRegistry: "chaitin-registry.cn-hangzhou.cr.aliyuncs.com/chaitin"
+
+# 机密信息（建议实际使用时改为 Secret 引用，这里先用 env 简化演示）
+secrets:
+  natsPassword: "secrets-nats"
+  postgresPassword: "secrets-postgres"
+  redisPassword: "secrets-redis"
+  s3SecretKey: "secrets-s3"
+  jwtSecret: "secrets-jwt"
+  adminPassword: "secrets-admin"
+  qdrantApiKey: "secrets-qdrant"
+
+# app Web 前端
+app:
+  image: "panda-wiki-app"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 80
+
+# api 服务
+api:
+  image: "panda-wiki-api"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 8080
+  # 若有其他环境变量，可追加在这里
+  extraEnv:
+    - name: DATABASE_HOST
+      value: "{{ include \"panda-wiki.postgres.host\" . }}"
+    - name: DATABASE_PORT
+      value: "{{ include \"panda-wiki.postgres.port\" . }}"
+
+# consumer
+consumer:
+  enabled: true
+  image: "panda-wiki-consumer"
+  replicaCount: 1
+  resources: {}
+
+# Postgres / External Database
+postgres:
+  enabled: true
+  # 当 enabled 为 false 时，externalHost/externalPort 生效
+  externalHost: "postgres.example.com"
+  externalPort: 5432
+  image: "panda-wiki-postgres:17.5"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 5432
+  storage:
+    size: 20Gi
+    storageClassName: ""    # 如需指定存储类，在此处填写
+  username: "panda-wiki"
+  database: "panda-wiki"
+
+# Redis
+redis:
+  enabled: true
+  image: "panda-wiki-redis:7.4.2-alpine"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 6379
+  storage:
+    size: 10Gi
+    storageClassName: ""
+
+# MinIO / External Object Storage
+minio:
+  enabled: true
+  # 当 enabled 为 false 时，以下 externalHost/externalPort 生效
+  externalHost: "minio.example.com"
+  externalPort: 9000
+  image: "panda-wiki-minio:RELEASE.2025-04-22T22-12-26Z-cpuv1"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 9000
+    consolePort: 9001
+  storage:
+    size: 50Gi
+    storageClassName: ""
+  accessKey: "s3panda-wiki"
+
+# NATS
+nats:
+  enabled: true
+  image: "panda-wiki-nats:2.11.3-alpine"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 4222
+  config: |
+    # 简单示例，可根据原 /etc/nats/nats.conf 定制
+    port: 4222
+    jetstream: enabled
+    server_name: panda-wiki
+    max_payload: 8MB
+
+# Qdrant
+qdrant:
+  enabled: true
+  image: "panda-wiki-qdrant:v1.14.1"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 6333
+  storage:
+    size: 50Gi
+    storageClassName: ""
+
+# Crawler (anydoc)
+crawler:
+  enabled: true
+  image: "anydoc:v0.7.1"
+  replicaCount: 1
+  resources: {}
+
+# Raglite
+raglite:
+  enabled: true
+  image: "panda-wiki-raglite:1-5-0"
+  replicaCount: 1
+  resources: {}
+  service:
+    type: ClusterIP
+    port: 8080
+  storage:
+    size: 20Gi
+    storageClassName: ""
+
+# Istio Gateway / VirtualService 配置
+istio:
+  enabled: true
+  gateway:
+    name: panda-wiki-gateway
+    namespace: istio-system               # 若你的 istio-gateway 在其他 namespace，请修改
+    host: "panda-wiki.example.com"        # 访问域名
+    istio-gateway: "istio-ingressgateway" # 网关的实例类
+  # HTTP 路由规则在 templates/istio-gateway.yaml 中定义
