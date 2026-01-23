@@ -1,0 +1,83 @@
+replicaCount: 1
+
+image:
+  repository: calciumion/new-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+persistence:
+  enabled: true
+  # 指定 StorageClass；如需使用默认 StorageClass，可设为 "" 或注释掉
+  storageClassName: ""     # 例如: "nfs-client" / "gp2" / "local-path"
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  # 可选：如果你要绑定已有 PVC
+  existingClaim: ""        # 例如: "new-api-pvc"
+
+# 将 data 与 logs 统一到一个 PVC 里，通过 subPath 区分目录
+paths:
+  dataSubPath: data
+  logsSubPath: logs
+
+mountLogs:
+  enabled: true
+  path: /app/logs
+
+env:
+  SQL_DSN: "postgresql://root:123456@postgres:5432/new-api"
+  # REDIS_CONN_STRING: "redis://redis"
+  TZ: "Asia/Shanghai"
+  ERROR_LOG_ENABLED: "true"
+  BATCH_UPDATE_ENABLED: "true"
+  STREAMING_TIMEOUT: "300"
+  SESSION_SECRET: "random_string"
+  # SYNC_FREQUENCY: "60"
+  # GOOGLE_ANALYTICS_ID: "G-XXXXXXXXXX"
+  # UMAMI_WEBSITE_ID: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  # UMAMI_SCRIPT_URL: "https://analytics.umami.is/script.js"
+
+extraArgs: []
+
+resources:
+ requests:
+   cpu: 100m
+   memory: 256Mi
+ limits:
+   cpu: 500m
+   memory: 1Gi
+
+redis:
+  enabled: true
+
+  host: ""
+  port: 6379
+  scheme: redis
+
+  image:
+    repository: redis
+    tag: "7.4"
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 6379
+
+  auth:
+    enabled: false
+    password: "" # auth.enabled=true 时必填（也可改成从 existingSecret 取）
+    existingSecret:
+      name: ""
+      key: "password"
+
+  persistence:
+    enabled: true
+    storageClassName: ""
+    accessModes: ["ReadWriteOnce"]
+    size: 20Gi
+
+  resources: {}

@@ -1,9 +1,20 @@
 apiVersion: v1
 entries:
+  new-api:
+  - apiVersion: v2
+    appVersion: latest
+    created: "2026-01-23T17:33:13.7306593+08:00"
+    description: new-api Helm chart
+    digest: eb5bb57ee9ac214a19833b2bcc03cd8ebedfac90feaf5e14757d94fccd2fd949
+    name: new-api
+    type: application
+    urls:
+    - new-api-0.1.0.tgz
+    version: 0.1.0
   panda-wiki:
   - apiVersion: v2
     appVersion: v3.54.0
-    created: "2025-12-11T15:33:24.4423051+08:00"
+    created: "2026-01-23T17:33:13.7317115+08:00"
     description: Panda Wiki Kubernetes deployment via Helm
     digest: 4f312826a30ebddf7cb602fb0a778c7de42265991d377b80f0d24b5c2a6b60a2
     name: panda-wiki
@@ -11,4 +22,4 @@ entries:
     urls:
     - panda-wiki-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-11T15:33:24.4412047+08:00"
+generated: "2026-01-23T17:33:13.7284535+08:00"

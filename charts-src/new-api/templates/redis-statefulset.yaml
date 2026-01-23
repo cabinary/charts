@@ -1,0 +1,61 @@
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "newapi.fullname" . }}-redis
+spec:
+  serviceName: {{ include "newapi.fullname" . }}-redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "newapi.name" . }}
+      component: redis
+  template:
+    metadata:
+      labels:
+        app: {{ include "newapi.name" . }}
+        component: redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          ports:
+            - name: redis
+              containerPort: 6379
+
+          {{- if .Values.redis.auth.enabled }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newapi.redis.authSecretName" . }}
+                  key: {{ include "newapi.redis.authSecretKey" . }}
+          {{- end }}
+
+          args:
+            - "redis-server"
+            - "--appendonly"
+            - "yes"
+          {{- if .Values.redis.auth.enabled }}
+            - "--requirepass"
+            - "$(REDIS_PASSWORD)"
+          {{- end }}
+
+          volumeMounts:
+            - name: data
+              mountPath: /data
+
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+{{ toYaml .Values.redis.persistence.accessModes | indent 10 }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size | quote }}
+        {{- if .Values.redis.persistence.storageClassName }}
+        storageClassName: {{ .Values.redis.persistence.storageClassName | quote }}
+        {{- end }}
+{{- end }}

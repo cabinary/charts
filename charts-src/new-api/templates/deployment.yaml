@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "newapi.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "newapi.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "newapi.name" . }}
+    spec:
+      containers:
+        - name: new-api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+{{- range .Values.extraArgs }}
+          - {{ . | quote }}
+{{- end }}
+{{- if .Values.mountLogs.enabled }}
+          - "--log-dir"
+          - {{ .Values.mountLogs.path | quote }}
+{{- end }}
+          env:
+          # 1) 先注入通用 env（如果你有 .Values.env）
+          {{- range $k, $v := .Values.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+          {{- end }}
+          # 2) 再注入 Redis（根据 .Values.redis.enabled / host / auth）
+          {{- if .Values.redis.enabled }}
+            {{- if .Values.redis.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newapi.redis.authSecretName" . }}
+                  key: {{ include "newapi.redis.authSecretKey" . }}
+            - name: REDIS_CONN_STRING
+              value: "{{ .Values.redis.scheme }}://:$(REDIS_PASSWORD)@{{ include "newapi.redis.serviceName" . }}:{{ .Values.redis.service.port }}"
+              {{- else }}
+            - name: REDIS_CONN_STRING
+              value: "{{ .Values.redis.scheme }}://{{ include "newapi.redis.serviceName" . }}:{{ .Values.redis.service.port }}"
+              {{- end }}
+          {{- else }}
+            {{- $addr := include "newapi.redis.externalAddress" . }}
+            {{- if .Values.redis.auth.enabled }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newapi.redis.authSecretName" . }}
+                  key: {{ include "newapi.redis.authSecretKey" . }}
+            - name: REDIS_CONN_STRING
+              value: "{{ .Values.redis.scheme }}://:$(REDIS_PASSWORD)@{{ $addr }}"
+              {{- else }}
+            - name: REDIS_CONN_STRING
+              value: "{{ .Values.redis.scheme }}://{{ $addr }}"
+              {{- end }}
+          {{- end }}
+          volumeMounts:
+            # 同一个 PVC，不同 subPath
+            - name: app-storage
+              mountPath: /data
+              subPath: {{ .Values.paths.dataSubPath | quote }}
+{{- if .Values.mountLogs.enabled }}
+            - name: app-storage
+              mountPath: {{ .Values.mountLogs.path | quote }}
+              subPath: {{ .Values.paths.logsSubPath | quote }}
+{{- end }}
+
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+
+      volumes:
+        - name: app-storage
+          persistentVolumeClaim:
+            claimName: {{ if .Values.persistence.existingClaim -}}
+              {{ .Values.persistence.existingClaim | quote }}
+            {{- else -}}
+              {{ include "newapi.fullname" . }}
+            {{- end }}
