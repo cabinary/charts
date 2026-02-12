@@ -1,0 +1,11 @@
+* text=auto
+
+*.yaml text eol=lf
+*.yml text eol=lf
+*.tpl text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.conf text eol=lf
+CNAME text eol=lf
+
+*.tgz binary

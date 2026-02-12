@@ -3,9 +3,9 @@ entries:
   new-api:
   - apiVersion: v2
     appVersion: latest
-    created: "2026-02-12T23:54:51.5453536+08:00"
+    created: "2026-02-13T00:05:46.6832418+08:00"
     description: new-api Helm chart
-    digest: 275dc6ab3511fd82a78e4da21e34988a2e78a4b64ae37143f379818241fac355
+    digest: 29d838a3509455db667b1c91125afa54f144ee6baf795bd7251aaecb871879e9
     name: new-api
     type: application
     urls:
@@ -14,12 +14,12 @@ entries:
   panda-wiki:
   - apiVersion: v2
     appVersion: v3.54.0
-    created: "2026-02-12T23:54:51.5782962+08:00"
+    created: "2026-02-13T00:05:46.6843175+08:00"
     description: Panda Wiki Kubernetes deployment via Helm
-    digest: 4f312826a30ebddf7cb602fb0a778c7de42265991d377b80f0d24b5c2a6b60a2
+    digest: 234023dd8db964994ece3632e308579c16dfe5b3f92d07cedcae1e7d098974c0
     name: panda-wiki
     type: application
     urls:
     - https://helm.flandre.io/panda-wiki-0.1.0.tgz
     version: 0.1.0
-generated: "2026-02-12T23:54:51.5443887+08:00"
+generated: "2026-02-13T00:05:46.6826086+08:00"
