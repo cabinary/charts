@@ -23,10 +23,18 @@ new-api
 {{- end -}}
 
 {{- define "newapi.redis.externalAddress" -}}
-{{- $host := required "redis.host is required when redis.enabled=false" .Values.redis.host -}}
+{{- $host := required "when redis.enabled=false, set env.REDIS_CONN_STRING or redis.host" .Values.redis.host -}}
 {{- if contains ":" $host -}}
 {{- $host -}}
 {{- else -}}
 {{- printf "%s:%v" $host (.Values.redis.port | default 6379) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "newapi.needsPVC" -}}
+{{- if or (not .Values.database.usePostgres) .Values.mountLogs.enabled -}}
+true
+{{- else -}}
+false
 {{- end -}}
 {{- end -}}

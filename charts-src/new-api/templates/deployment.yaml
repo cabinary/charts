@@ -12,25 +12,38 @@ spec:
       labels:
         app: {{ include "newapi.name" . }}
     spec:
+      {{- $needsPvc := eq (include "newapi.needsPVC" .) "true" }}
       containers:
         - name: new-api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- $args := list -}}
+          {{- range .Values.extraArgs }}
+          {{- $args = append $args (printf "%v" .) -}}
+          {{- end -}}
+          {{- if .Values.mountLogs.enabled -}}
+          {{- $args = append $args "--log-dir" -}}
+          {{- $args = append $args (printf "%v" .Values.mountLogs.path) -}}
+          {{- end -}}
+          {{- if gt (len $args) 0 }}
           args:
-{{- range .Values.extraArgs }}
-          - {{ . | quote }}
-{{- end }}
-{{- if .Values.mountLogs.enabled }}
-          - "--log-dir"
-          - {{ .Values.mountLogs.path | quote }}
-{{- end }}
+          {{- range $args }}
+            - {{ . | quote }}
+          {{- end }}
+          {{- end }}
           env:
           # 1) 先注入通用 env（如果你有 .Values.env）
           {{- range $k, $v := .Values.env }}
             - name: {{ $k }}
               value: {{ $v | quote }}
           {{- end }}
+          {{- if .Values.database.usePostgres }}
+            - name: SQL_DSN
+              value: {{ required "database.externalPostgresDsn is required when database.usePostgres=true" .Values.database.externalPostgresDsn | quote }}
+          {{- end }}
           # 2) 再注入 Redis（根据 .Values.redis.enabled / host / auth）
+          {{- $externalRedisConn := default "" (index .Values.env "REDIS_CONN_STRING") }}
+          {{- $hasExternalRedisConn := ne $externalRedisConn "" }}
           {{- if .Values.redis.enabled }}
             {{- if .Values.redis.auth.enabled }}
             - name: REDIS_PASSWORD
@@ -45,8 +58,9 @@ spec:
               value: "{{ .Values.redis.scheme }}://{{ include "newapi.redis.serviceName" . }}:{{ .Values.redis.service.port }}"
               {{- end }}
           {{- else }}
-            {{- $addr := include "newapi.redis.externalAddress" . }}
-            {{- if .Values.redis.auth.enabled }}
+            {{- if not $hasExternalRedisConn }}
+              {{- $addr := include "newapi.redis.externalAddress" . }}
+              {{- if .Values.redis.auth.enabled }}
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -54,21 +68,25 @@ spec:
                   key: {{ include "newapi.redis.authSecretKey" . }}
             - name: REDIS_CONN_STRING
               value: "{{ .Values.redis.scheme }}://:$(REDIS_PASSWORD)@{{ $addr }}"
-              {{- else }}
+                {{- else }}
             - name: REDIS_CONN_STRING
               value: "{{ .Values.redis.scheme }}://{{ $addr }}"
-              {{- end }}
+                {{- end }}
+            {{- end }}
           {{- end }}
+          {{- if $needsPvc }}
           volumeMounts:
-            # 同一个 PVC，不同 subPath
+            {{- if not .Values.database.usePostgres }}
             - name: app-storage
               mountPath: /data
               subPath: {{ .Values.paths.dataSubPath | quote }}
-{{- if .Values.mountLogs.enabled }}
+            {{- end }}
+            {{- if .Values.mountLogs.enabled }}
             - name: app-storage
               mountPath: {{ .Values.mountLogs.path | quote }}
               subPath: {{ .Values.paths.logsSubPath | quote }}
-{{- end }}
+            {{- end }}
+          {{- end }}
 
           readinessProbe:
             httpGet:
@@ -91,6 +109,7 @@ spec:
           resources:
 {{ toYaml .Values.resources | indent 12 }}
 
+      {{- if $needsPvc }}
       volumes:
         - name: app-storage
           persistentVolumeClaim:
@@ -99,3 +118,4 @@ spec:
             {{- else -}}
               {{ include "newapi.fullname" . }}
             {{- end }}
+      {{- end }}

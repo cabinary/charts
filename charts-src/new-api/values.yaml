@@ -5,34 +5,34 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
+database:
+  usePostgres: true
+  externalPostgresDsn: "postgresql://root:123456@postgres:5432/new-api"
+
 service:
   type: ClusterIP
   port: 3000
 
 persistence:
-  enabled: true
-  # 指定 StorageClass；如需使用默认 StorageClass，可设为 "" 或注释掉
+  # 在 database.usePostgres=false 或 mountLogs.enabled=true 时生效
   storageClassName: ""     # 例如: "nfs-client" / "gp2" / "local-path"
   accessModes:
     - ReadWriteOnce
   size: 20Gi
-  # 可选：如果你要绑定已有 PVC
   existingClaim: ""        # 例如: "new-api-pvc"
 
-# 将 data 与 logs 统一到一个 PVC 里，通过 subPath 区分目录
+mountLogs:
+  enabled: false
+  path: /app/logs
+
 paths:
   dataSubPath: data
   logsSubPath: logs
 
-mountLogs:
-  enabled: true
-  path: /app/logs
-
 env:
-  SQL_DSN: "postgresql://root:123456@postgres:5432/new-api"
   # REDIS_CONN_STRING: "redis://redis"
   TZ: "Asia/Shanghai"
-  ERROR_LOG_ENABLED: "true"
+  ERROR_LOG_ENABLED: "false"
   BATCH_UPDATE_ENABLED: "true"
   STREAMING_TIMEOUT: "300"
   SESSION_SECRET: "random_string"
@@ -48,7 +48,7 @@ resources:
    cpu: 100m
    memory: 256Mi
  limits:
-   cpu: 500m
+   cpu: 1
    memory: 1Gi
 
 redis:
