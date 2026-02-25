@@ -1,17 +1,83 @@
+# Deployment 副本数
 replicaCount: 1
 
+# 应用镜像配置
 image:
   repository: calciumion/new-api
   tag: latest
   pullPolicy: IfNotPresent
 
+# 数据库配置（当前 chart 仅支持外部 PostgreSQL DSN）
 database:
+  # true: 使用外部 PostgreSQL；false: 依赖本 chart 的本地数据目录（需 PVC）
   usePostgres: true
+  # 当 usePostgres=true 时必填
   externalPostgresDsn: "postgresql://root:123456@postgres:5432/new-api"
 
+# Kubernetes Service 配置
 service:
   type: ClusterIP
   port: 3000
+
+# 统一路由定义（Ingress 与 Istio VirtualService 默认都复用此配置）
+route:
+  # 对外访问域名列表（推荐，原生多域名）
+  hosts:
+    - "new-api.example.com"
+  # 兼容旧配置：单域名写法（仅当 hosts 为空时作为回退）
+  host: ""
+  # 路由路径列表
+  paths:
+    # pathType 用于 Ingress，matchType 用于 Istio VirtualService 自动生成规则
+    - path: /
+      pathType: Prefix
+      matchType: prefix
+  # 通用 TLS 列表（可被 Ingress 复用，支持多条）
+  # 每项结构：
+  # - secretName: "example-tls"
+  #   hosts:
+  #     - "codex.example.com"
+  #     - "claude.example.com"
+  tls: []
+
+# Ingress 资源（不创建 ingress-controller 本体）
+ingress:
+  enabled: false
+  # ingressClassName，默认 alb
+  className: "alb"
+  # 可选：显式覆盖域名列表；为空时回退 route.hosts/route.host
+  hosts: []
+  # 默认 ALB 注解，可按需覆盖/追加
+  annotations:
+    alb.ingress.kubernetes.io/backend-protocol: http
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS": 443},{"QUIC":443}]'
+    alb.ingress.kubernetes.io/order: "999"
+  # Ingress TLS 列表（Ingress 特有能力，支持多条）
+  # 为空时回退复用 route.tls
+  # 每项结构：
+  # - secretName: "example-tls"
+  #   hosts:
+  #     - "codex.example.com"
+  #     - "claude.example.com"
+  tls: []
+  # 额外 labels（保留键 app/ingress-controller 会被模板保护）
+  labels: {}
+
+# Istio 路由资源（仅创建 VirtualService，不创建 Gateway 本体）
+istio:
+  enabled: false
+  virtualService:
+    # 你的集群需要支持 networking.istio.io/v1，如果集群是低于1.33的请调整为对应的Istio支持的版本
+    apiVersion: networking.istio.io/v1
+    # 必填：引用外部已存在的 gateway，格式为 <namespace>/<name>
+    gateways:
+      - istio-system/default-gateway
+    # 可选：显式覆盖 host 列表；为空时回退 route.hosts/route.host
+    hosts: []
+    # 可选：显式自定义完整 http 规则；为空时由 route.paths 自动生成
+    http: []
+    # 额外 labels（保留键 app 会被模板保护）
+    labels: {}
 
 persistence:
   # 在 database.usePostgres=false 或 mountLogs.enabled=true 时生效
@@ -21,15 +87,19 @@ persistence:
   size: 20Gi
   existingClaim: ""        # 例如: "new-api-pvc"
 
+# 日志目录挂载（启用后会额外挂载 PVC 到应用日志目录）
 mountLogs:
   enabled: false
   path: /app/logs
 
+# PVC 子路径配置
 paths:
   dataSubPath: data
   logsSubPath: logs
 
+# 应用环境变量（会注入到容器 env）
 env:
+  # 若填写此项，将优先使用外部 Redis 连接串
   # REDIS_CONN_STRING: "redis://redis"
   TZ: "Asia/Shanghai"
   ERROR_LOG_ENABLED: "false"
@@ -41,8 +111,10 @@ env:
   # UMAMI_WEBSITE_ID: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
   # UMAMI_SCRIPT_URL: "https://analytics.umami.is/script.js"
 
+# 启动参数（数组形式，附加到容器 args）
 extraArgs: []
 
+# Pod 资源请求与限制
 resources:
  requests:
    cpu: 100m
@@ -51,22 +123,28 @@ resources:
    cpu: 1
    memory: 1Gi
 
+# Redis 配置（可使用内置 Redis 或外部 Redis）
 redis:
+  # true: 创建内置 Redis StatefulSet；false: 使用 env.REDIS_CONN_STRING 或 redis.host
   enabled: true
 
+  # 当 enabled=false 且未提供 env.REDIS_CONN_STRING 时，需提供 host/port
   host: ""
   port: 6379
   scheme: redis
 
+  # 内置 Redis 镜像
   image:
     repository: redis
     tag: "7.4"
     pullPolicy: IfNotPresent
 
+  # 内置 Redis Service
   service:
     type: ClusterIP
     port: 6379
 
+  # Redis 认证配置
   auth:
     enabled: false
     password: "" # auth.enabled=true 时必填（也可改成从 existingSecret 取）
@@ -74,10 +152,12 @@ redis:
       name: ""
       key: "password"
 
+  # 内置 Redis 持久化
   persistence:
     enabled: true
     storageClassName: ""
     accessModes: ["ReadWriteOnce"]
     size: 20Gi
 
+  # Redis 资源限制（空表示不限制）
   resources: {}

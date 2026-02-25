@@ -17,6 +17,10 @@ spec:
         - name: new-api
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
           {{- $args := list -}}
           {{- range .Values.extraArgs }}
           {{- $args = append $args (printf "%v" .) -}}
@@ -91,7 +95,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /api/status
-              port: 3000
+              port: http
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -100,7 +104,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /api/status
-              port: 3000
+              port: http
             initialDelaySeconds: 20
             periodSeconds: 30
             timeoutSeconds: 5

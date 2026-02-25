@@ -1,0 +1,50 @@
+{{- if .Values.istio.enabled }}
+{{- $routeHosts := .Values.route.hosts | default (list) -}}
+{{- if and (eq (len $routeHosts) 0) (.Values.route.host) -}}
+{{- $routeHosts = list .Values.route.host -}}
+{{- end -}}
+{{- $hosts := .Values.istio.virtualService.hosts | default (list) -}}
+{{- if eq (len $hosts) 0 -}}
+{{- $hosts = $routeHosts -}}
+{{- end -}}
+{{- if eq (len $hosts) 0 -}}
+{{- fail "at least one host is required: set istio.virtualService.hosts or route.hosts (or legacy route.host)" -}}
+{{- end -}}
+apiVersion: {{ default "networking.istio.io/v1" .Values.istio.virtualService.apiVersion }}
+kind: VirtualService
+metadata:
+  name: {{ include "newapi.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  {{- $extraVsLabels := omit .Values.istio.virtualService.labels "app" }}
+  labels:
+    app: {{ include "newapi.name" . }}
+    {{- with $extraVsLabels }}
+{{ toYaml . | indent 4 }}
+  {{- end }}
+spec:
+  hosts:
+{{ toYaml $hosts | indent 4 }}
+  gateways:
+{{ required "istio.virtualService.gateways is required when istio.enabled=true" .Values.istio.virtualService.gateways | toYaml | indent 4 }}
+  {{- if gt (len .Values.istio.virtualService.http) 0 }}
+  http:
+{{ toYaml .Values.istio.virtualService.http | indent 4 }}
+  {{- else }}
+  http:
+    {{- range $index, $path := .Values.route.paths }}
+    - name: route-{{ $index }}
+      match:
+        - uri:
+            {{- if eq (lower (default "prefix" $path.matchType)) "exact" }}
+            exact: {{ default "/" $path.path | quote }}
+            {{- else }}
+            prefix: {{ default "/" $path.path | quote }}
+            {{- end }}
+      route:
+        - destination:
+            host: {{ include "newapi.serviceFQDN" $ }}
+            port:
+              number: {{ $.Values.service.port }}
+    {{- end }}
+  {{- end }}
+{{- end }}

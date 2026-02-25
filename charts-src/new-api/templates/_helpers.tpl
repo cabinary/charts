@@ -6,6 +6,10 @@ new-api
 {{- printf "%s" (include "newapi.name" .) -}}
 {{- end -}}
 
+{{- define "newapi.serviceFQDN" -}}
+{{- printf "%s.%s.svc.cluster.local" (include "newapi.fullname" .) .Release.Namespace -}}
+{{- end -}}
+
 {{- define "newapi.redis.serviceName" -}}
 {{- printf "%s-redis" (include "newapi.fullname" .) -}}
 {{- end -}}

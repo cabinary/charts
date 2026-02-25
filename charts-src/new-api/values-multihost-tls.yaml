@@ -1,0 +1,61 @@
+# new-api 多域名 + TLS 专用示例
+# 用法：
+#   helm template new-api . -f values-multihost-tls.yaml
+#   helm upgrade --install new-api . -f values-multihost-tls.yaml
+
+# 路由统一源：Ingress 与 VirtualService 默认共用
+route:
+  hosts:
+    - codex.example.com
+    - claude.example.com
+    - gemini.example.com
+  paths:
+    - path: /
+      pathType: Prefix
+      matchType: prefix
+  # 通用 TLS 定义（Ingress 在 ingress.tls 为空时会复用这里）
+  tls:
+    - secretName: example-tls
+      hosts:
+        - codex.example.com
+        - claude.example.com
+        - gemini.example.com
+
+ingress:
+  enabled: true
+  className: alb
+  # 为空表示复用 route.hosts
+  hosts: []
+  annotations:
+    alb.ingress.kubernetes.io/backend-protocol: http
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS": 443},{"QUIC":443}]'
+    alb.ingress.kubernetes.io/order: "999"
+  # 为空表示复用 route.tls
+  tls: []
+  labels:
+    team: platform
+
+istio:
+  enabled: true
+  virtualService:
+    apiVersion: networking.istio.io/v1
+    gateways:
+      - istio-system/panda-wiki-gateway
+    # 为空表示复用 route.hosts
+    hosts: []
+    # 为空表示按 route.paths 自动生成 HTTP 路由
+    http: []
+    labels:
+      team: platform
+
+# 可选：如果你需要 Ingress 使用“多个 TLS 条目”，把下面解开并按需修改。
+# 注意：一旦 ingress.tls 非空，将优先使用 ingress.tls，不再复用 route.tls。
+# ingress:
+#   tls:
+#     - secretName: example-tls
+#       hosts:
+#         - codex.example.com
+#         - claude.example.com
+#     - secretName: another-tls
+#       hosts:
+#         - gemini.example.com

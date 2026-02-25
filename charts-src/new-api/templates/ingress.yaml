@@ -1,0 +1,77 @@
+{{- if .Values.ingress.enabled }}
+{{- $routeHosts := .Values.route.hosts | default (list) -}}
+{{- if and (eq (len $routeHosts) 0) (.Values.route.host) -}}
+{{- $routeHosts = list .Values.route.host -}}
+{{- end -}}
+{{- $hosts := .Values.ingress.hosts | default (list) -}}
+{{- if eq (len $hosts) 0 -}}
+{{- $hosts = $routeHosts -}}
+{{- end -}}
+{{- if eq (len $hosts) 0 -}}
+{{- fail "at least one host is required: set ingress.hosts or route.hosts (or legacy route.host)" -}}
+{{- end -}}
+{{- $routeTls := list -}}
+{{- if kindIs "slice" .Values.route.tls -}}
+{{- $routeTls = .Values.route.tls -}}
+{{- else if and .Values.route.tls.enabled .Values.route.tls.secretName -}}
+{{- $legacyRouteTlsHosts := .Values.route.tls.hosts | default $hosts -}}
+{{- $routeTls = append $routeTls (dict "secretName" .Values.route.tls.secretName "hosts" $legacyRouteTlsHosts) -}}
+{{- end -}}
+{{- $ingressTls := list -}}
+{{- if kindIs "slice" .Values.ingress.tls -}}
+{{- $ingressTls = .Values.ingress.tls -}}
+{{- else if and .Values.ingress.tls.enabled (.Values.ingress.tls.secretName | default .Values.route.tls.secretName) -}}
+{{- $legacyIngressSecret := .Values.ingress.tls.secretName | default .Values.route.tls.secretName -}}
+{{- $legacyIngressHosts := .Values.ingress.tls.hosts | default $hosts -}}
+{{- $ingressTls = append $ingressTls (dict "secretName" $legacyIngressSecret "hosts" $legacyIngressHosts) -}}
+{{- end -}}
+{{- $effectiveTls := $ingressTls -}}
+{{- if eq (len $effectiveTls) 0 -}}
+{{- $effectiveTls = $routeTls -}}
+{{- end -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "newapi.fullname" . }}
+  {{- $extraIngressLabels := omit .Values.ingress.labels "app" "ingress-controller" }}
+  labels:
+    app: {{ include "newapi.name" . }}
+    ingress-controller: {{ default "alb" .Values.ingress.className | quote }}
+    {{- with $extraIngressLabels }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- end }}
+  rules:
+    {{- range $host := $hosts }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- range $.Values.route.paths }}
+          - path: {{ default "/" .path | quote }}
+            pathType: {{ default "Prefix" .pathType }}
+            backend:
+              service:
+                name: {{ include "newapi.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- if gt (len $effectiveTls) 0 }}
+  tls:
+    {{- range $tls := $effectiveTls }}
+    - secretName: {{ required "each ingress tls item requires secretName" $tls.secretName | quote }}
+      hosts:
+        {{- $tlsHosts := $tls.hosts | default $hosts -}}
+        {{- range $host := $tlsHosts }}
+        - {{ $host | quote }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
