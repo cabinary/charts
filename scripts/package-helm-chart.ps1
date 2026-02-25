@@ -6,7 +6,10 @@ param(
 
     [switch]$UpdateIndex,
 
-    [string]$RepoUrl = "https://helm.flandre.io"
+    [string]$RepoUrl = "https://helm.flandre.io",
+
+    [ValidateSet("WorkingTree", "GitHead")]
+    [string]$SourceMode = "WorkingTree"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,7 +17,13 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $chartPathNormalized = $ChartPath.TrimStart(".", "/", "\").Replace("/", "\")
 $chartSourceInRepo = Join-Path $repoRoot $chartPathNormalized
-$destinationAbs = (Resolve-Path (Join-Path $repoRoot $Destination)).Path
+$destinationPathInRepo = Join-Path $repoRoot $Destination
+
+if (-not (Test-Path $destinationPathInRepo)) {
+    New-Item -ItemType Directory -Path $destinationPathInRepo -Force | Out-Null
+}
+
+$destinationAbs = (Resolve-Path $destinationPathInRepo).Path
 
 if (-not (Test-Path $chartSourceInRepo)) {
     throw "Chart path not found: $chartSourceInRepo"
@@ -24,9 +33,11 @@ if (-not (Test-Path (Join-Path $chartSourceInRepo "Chart.yaml"))) {
     throw "Chart.yaml not found under: $chartSourceInRepo"
 }
 
-$null = git -C $repoRoot rev-parse --is-inside-work-tree 2>$null
-if ($LASTEXITCODE -ne 0) {
-    throw "Current directory is not a git repository: $repoRoot"
+if ($SourceMode -eq "GitHead") {
+    $null = git -C $repoRoot rev-parse --is-inside-work-tree 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Current directory is not a git repository: $repoRoot"
+    }
 }
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("helm-package-" + [System.Guid]::NewGuid().ToString("N"))
@@ -57,29 +68,42 @@ function Convert-ToLf {
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 
 try {
-    Write-Host "[1/3] Exporting chart from git HEAD with normalized LF..."
-    git -C $repoRoot archive --format=zip --output=$zipPath HEAD -- $chartPathNormalized
-    if ($LASTEXITCODE -ne 0) {
-        throw "git archive failed"
+    $chartExportPath = Join-Path $tempRoot $chartPathNormalized
+
+    if ($SourceMode -eq "GitHead") {
+        Write-Host "[1/3] Exporting chart from git HEAD..."
+        git -C $repoRoot archive --format=zip --output=$zipPath HEAD -- $chartPathNormalized
+        if ($LASTEXITCODE -ne 0) {
+            throw "git archive failed"
+        }
+
+        Expand-Archive -Path $zipPath -DestinationPath $tempRoot -Force
+    }
+    else {
+        Write-Host "[1/3] Copying chart from working tree..."
+        $chartParent = Split-Path -Path $chartExportPath -Parent
+        if (-not (Test-Path $chartParent)) {
+            New-Item -ItemType Directory -Path $chartParent -Force | Out-Null
+        }
+
+        Copy-Item -Path $chartSourceInRepo -Destination $chartExportPath -Recurse -Force
     }
 
-    Expand-Archive -Path $zipPath -DestinationPath $tempRoot -Force
-
-    $chartExportPath = Join-Path $tempRoot $chartPathNormalized
     if (-not (Test-Path (Join-Path $chartExportPath "Chart.yaml"))) {
         throw "Exported chart not found: $chartExportPath"
     }
 
+    Write-Host "[2/3] Normalizing LF line endings..."
     Convert-ToLf -RootPath $chartExportPath
 
-    Write-Host "[2/3] Packaging chart with helm..."
+    Write-Host "[3/3] Packaging chart with helm..."
     helm package $chartExportPath --destination $destinationAbs
     if ($LASTEXITCODE -ne 0) {
         throw "helm package failed"
     }
 
     if ($UpdateIndex) {
-        Write-Host "[3/3] Updating repository index..."
+        Write-Host "[4/4] Updating repository index..."
         $indexPath = Join-Path $destinationAbs "index.yaml"
         if (Test-Path $indexPath) {
             helm repo index $destinationAbs --url $RepoUrl --merge $indexPath
