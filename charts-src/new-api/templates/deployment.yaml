@@ -13,9 +13,10 @@ spec:
         app: {{ include "newapi.name" . }}
     spec:
       {{- $needsPvc := eq (include "newapi.needsPVC" .) "true" }}
+      {{- $imageTag := default .Chart.AppVersion .Values.image.tag }}
       containers:
         - name: new-api
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ $imageTag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
@@ -42,8 +43,24 @@ spec:
               value: {{ $v | quote }}
           {{- end }}
           {{- if .Values.database.usePostgres }}
+            {{- $dbHost := required "database.host is required when database.usePostgres=true" .Values.database.host }}
+            {{- $dbPort := .Values.database.port | default 5432 }}
+            {{- $dbName := .Values.database.database | default "newapi" }}
+            {{- $dbParams := .Values.database.params | default "" }}
+            {{- $dbUser := required "database.auth.username is required when database.usePostgres=true" .Values.database.auth.username }}
+            {{- if .Values.database.auth.existingSecret.name }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "newapi.database.authSecretName" . }}
+                  key: {{ include "newapi.database.authSecretKey" . }}
             - name: SQL_DSN
-              value: {{ required "database.externalPostgresDsn is required when database.usePostgres=true" .Values.database.externalPostgresDsn | quote }}
+              value: "postgresql://{{ $dbUser }}:$(DB_PASSWORD)@{{ $dbHost }}:{{ $dbPort }}/{{ $dbName }}{{- if $dbParams }}?{{ $dbParams }}{{- end }}"
+            {{- else }}
+            {{- $dbPassword := required "database.auth.password is required when database.auth.existingSecret.name is empty" .Values.database.auth.password }}
+            - name: SQL_DSN
+              value: "postgresql://{{ $dbUser }}:{{ $dbPassword }}@{{ $dbHost }}:{{ $dbPort }}/{{ $dbName }}{{- if $dbParams }}?{{ $dbParams }}{{- end }}"
+            {{- end }}
           {{- end }}
           # 2) 再注入 Redis（根据 .Values.redis.enabled / host / auth）
           {{- $externalRedisConn := default "" (index .Values.env "REDIS_CONN_STRING") }}

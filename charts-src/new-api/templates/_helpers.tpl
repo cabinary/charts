@@ -26,6 +26,18 @@ new-api
 {{- default "password" .Values.redis.auth.existingSecret.key -}}
 {{- end -}}
 
+{{- define "newapi.database.authSecretName" -}}
+{{- if .Values.database.auth.existingSecret.name -}}
+{{- .Values.database.auth.existingSecret.name -}}
+{{- else -}}
+{{- printf "%s-db-auth" (include "newapi.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "newapi.database.authSecretKey" -}}
+{{- default "password" .Values.database.auth.existingSecret.key -}}
+{{- end -}}
+
 {{- define "newapi.redis.externalAddress" -}}
 {{- $host := required "when redis.enabled=false, set env.REDIS_CONN_STRING or redis.host" .Values.redis.host -}}
 {{- if contains ":" $host -}}

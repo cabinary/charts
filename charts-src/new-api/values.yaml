@@ -4,15 +4,25 @@ replicaCount: 1
 # 应用镜像配置
 image:
   repository: calciumion/new-api
-  tag: latest
+  # 为空时自动回退到 Chart.yaml 的 appVersion
+  tag: ""
   pullPolicy: IfNotPresent
 
-# 数据库配置（当前 chart 仅支持外部 PostgreSQL DSN）
+# 数据库配置（外部 PostgreSQL）
 database:
   # true: 使用外部 PostgreSQL；false: 依赖本 chart 的本地数据目录（需 PVC）
   usePostgres: true
-  # 当 usePostgres=true 时必填
-  externalPostgresDsn: "postgresql://root:123456@postgres:5432/new-api"
+  host: "postgres"
+  port: 5432
+  database: "newapi"
+  # 可选：DSN 查询参数，例如 sslmode=disable
+  params: ""
+  auth:
+    username: "root"
+    password: "123456"
+    existingSecret:
+      name: ""
+      key: "password"
 
 # Kubernetes Service 配置
 service:
