@@ -6,7 +6,7 @@ image:
   repository: calciumion/new-api
   # 为空时自动回退到 Chart.yaml 的 appVersion
   tag: ""
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # 数据库配置（外部 PostgreSQL）
 database:
@@ -112,14 +112,44 @@ env:
   # 若填写此项，将优先使用外部 Redis 连接串
   # REDIS_CONN_STRING: "redis://redis"
   TZ: "Asia/Shanghai"
-  ERROR_LOG_ENABLED: "false"
+  ERROR_LOG_ENABLED: "true"
   BATCH_UPDATE_ENABLED: "true"
   STREAMING_TIMEOUT: "300"
-  SESSION_SECRET: "random_string"
+  # SESSION_SECRET: "random_string"
   # SYNC_FREQUENCY: "60"
   # GOOGLE_ANALYTICS_ID: "G-XXXXXXXXXX"
   # UMAMI_WEBSITE_ID: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
   # UMAMI_SCRIPT_URL: "https://analytics.umami.is/script.js"
+
+# 机密环境变量（例如 SESSION_SECRET）建议统一从已存在的 Secret 注入
+envFromSecret:
+  # 已存在的 Secret 名称；为空则不注入
+  name: ""
+  # env 变量名 -> Secret key 映射
+  # key 为空时会默认使用同名 key
+  keys:
+    SESSION_SECRET: "SESSION_SECRET"
+
+# 定时更新（重启 Deployment 以拉取最新镜像；失败自动回滚）
+updater:
+  enabled: false
+  # Cron 表达式，默认每天 03:00 执行一次
+  schedule: "0 3 * * *"
+  # CronJob 时区；留空时读取 env.TZ（若 env.TZ 也未设置则回退 Etc/UTC）
+  timeZone: ""
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  rolloutTimeoutSeconds: 300
+
+# updater 专用 kubectl 镜像配置（与应用镜像解耦，避免镜像源配置耦合导致崩溃）
+kubectl:
+  image:
+    repository: docker.io/bitnami/kubectl
+    tag: "latest"
+    pullPolicy: IfNotPresent
 
 # 启动参数（数组形式，附加到容器 args）
 extraArgs: []

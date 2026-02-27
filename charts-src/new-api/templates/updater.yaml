@@ -1,0 +1,87 @@
+{{- if .Values.updater.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "newapi.updater.serviceAccountName" . }}
+  labels:
+    app: {{ include "newapi.name" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "newapi.updater.roleName" . }}
+  labels:
+    app: {{ include "newapi.name" . }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "newapi.updater.roleBindingName" . }}
+  labels:
+    app: {{ include "newapi.name" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "newapi.updater.roleName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "newapi.updater.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "newapi.updater.cronJobName" . }}
+  labels:
+    app: {{ include "newapi.name" . }}
+spec:
+  schedule: {{ required "updater.schedule is required when updater.enabled=true" .Values.updater.schedule | quote }}
+  {{- $tz := default (default "Etc/UTC" (index .Values.env "TZ")) .Values.updater.timeZone }}
+  timeZone: {{ $tz | quote }}
+  concurrencyPolicy: {{ .Values.updater.concurrencyPolicy | default "Forbid" }}
+  successfulJobsHistoryLimit: {{ .Values.updater.successfulJobsHistoryLimit | default 1 }}
+  failedJobsHistoryLimit: {{ .Values.updater.failedJobsHistoryLimit | default 3 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.updater.backoffLimit | default 0 }}
+      {{- if .Values.updater.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .Values.updater.activeDeadlineSeconds }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            app: {{ include "newapi.name" . }}
+            component: updater
+        spec:
+          serviceAccountName: {{ include "newapi.updater.serviceAccountName" . }}
+          restartPolicy: Never
+          {{- $kubectlTag := default "latest" .Values.kubectl.image.tag }}
+          containers:
+            - name: updater
+              image: "{{ .Values.kubectl.image.repository }}:{{ $kubectlTag }}"
+              imagePullPolicy: {{ .Values.kubectl.image.pullPolicy }}
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  DEPLOYMENT="{{ include "newapi.fullname" . }}"
+                  NAMESPACE="{{ .Release.Namespace }}"
+                  TIMEOUT="{{ .Values.updater.rolloutTimeoutSeconds | default 300 }}s"
+
+                  kubectl -n "$NAMESPACE" rollout restart deployment/$DEPLOYMENT
+                  if ! kubectl -n "$NAMESPACE" rollout status deployment/$DEPLOYMENT --timeout="$TIMEOUT"; then
+                    kubectl -n "$NAMESPACE" rollout undo deployment/$DEPLOYMENT
+                    kubectl -n "$NAMESPACE" rollout status deployment/$DEPLOYMENT --timeout="$TIMEOUT"
+                    exit 1
+                  fi
+{{- end }}

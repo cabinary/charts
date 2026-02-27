@@ -38,9 +38,22 @@ spec:
           {{- end }}
           env:
           # 1) 先注入通用 env（如果你有 .Values.env）
+          {{- $envFromSecretName := default "" .Values.envFromSecret.name }}
+          {{- $envFromSecretKeys := default (dict) .Values.envFromSecret.keys }}
           {{- range $k, $v := .Values.env }}
+            {{- if not (and (ne $envFromSecretName "") (hasKey $envFromSecretKeys $k)) }}
             - name: {{ $k }}
               value: {{ $v | quote }}
+            {{- end }}
+          {{- end }}
+          {{- if ne $envFromSecretName "" }}
+          {{- range $envName, $secretKey := $envFromSecretKeys }}
+            - name: {{ $envName }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $envFromSecretName }}
+                  key: {{ default $envName $secretKey }}
+          {{- end }}
           {{- end }}
           {{- if .Values.database.usePostgres }}
             {{- $dbHost := required "database.host is required when database.usePostgres=true" .Values.database.host }}

@@ -16,6 +16,7 @@ pwsh ./scripts/package-helm-chart.ps1 -ChartPath charts-src/new-api -Destination
 - 脚本默认从工作区复制 chart 到临时目录，并在打包前统一转换为 LF。
 - 因此发布产物不受本地工作区 CRLF 影响，同时支持未提交改动参与打包。
 - `-UpdateIndex` 会同步更新 `docs/index.yaml`。
+- 发布版本一律增量追加：保留 `docs/` 中历史 `.tgz`，只新增新版本并合并 `index.yaml`，不要删除旧版本包。
 
 如需强制按提交内容打包（忽略工作区未提交改动）：
 
@@ -42,6 +43,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\validate-helm-tgz-line-ending
 ## new-api 的 Ingress / Istio VirtualService
 
 `charts-src/new-api` 已支持通过 values 配置 `Ingress` 与 `VirtualService`，但不包含 Ingress Controller 或 Istio Gateway 资源本体定义。
+
+安装前建议先执行清单：`docs/new-api-preflight-checklist.md`
 
 - `Ingress` 通过 `ingress.className` 指定对应 ingress class。
 - `VirtualService` 通过 `istio.virtualService.gateways` 指定外部已存在的 gateway（例如 `istio-system/panda-wiki-gateway`）。

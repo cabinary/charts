@@ -4,6 +4,9 @@
 #   helm upgrade --install new-api . -f values-multihost-tls.yaml
 
 # 路由统一源：Ingress 与 VirtualService 默认共用
+image:
+  pullPolicy: Always
+
 route:
   hosts:
     - codex.example.com
@@ -47,6 +50,18 @@ istio:
     http: []
     labels:
       team: platform
+
+# 定时更新（按 Cron 重启 Deployment 并校验，不健康自动回滚）
+updater:
+  enabled: true
+  schedule: "0 */6 * * *"
+
+# updater 使用的 kubectl 镜像独立配置
+kubectl:
+  image:
+    repository: docker.io/bitnami/kubectl
+    tag: "latest"
+    pullPolicy: IfNotPresent
 
 # 可选：如果你需要 Ingress 使用“多个 TLS 条目”，把下面解开并按需修改。
 # 注意：一旦 ingress.tls 非空，将优先使用 ingress.tls，不再复用 route.tls。

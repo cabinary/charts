@@ -54,3 +54,19 @@ true
 false
 {{- end -}}
 {{- end -}}
+
+{{- define "newapi.updater.serviceAccountName" -}}
+{{- printf "%s-updater" (include "newapi.fullname" .) -}}
+{{- end -}}
+
+{{- define "newapi.updater.roleName" -}}
+{{- printf "%s-updater" (include "newapi.fullname" .) -}}
+{{- end -}}
+
+{{- define "newapi.updater.roleBindingName" -}}
+{{- printf "%s-updater" (include "newapi.fullname" .) -}}
+{{- end -}}
+
+{{- define "newapi.updater.cronJobName" -}}
+{{- printf "%s-updater" (include "newapi.fullname" .) -}}
+{{- end -}}
