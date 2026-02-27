@@ -150,6 +150,11 @@ kubectl:
     repository: docker.io/bitnami/kubectl
     tag: "latest"
     pullPolicy: IfNotPresent
+  # 额外环境变量（用于 kubectl 兼容性调优，例如 FIPS 场景）
+  env: {}
+  # FIPS-only 集群如遇到 `X25519 is not allowed`，可按需启用：
+  # env:
+  #   GODEBUG: "fips140=off"
 
 # 启动参数（数组形式，附加到容器 args）
 extraArgs: []

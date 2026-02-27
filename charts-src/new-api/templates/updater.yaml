@@ -70,6 +70,13 @@ spec:
             - name: updater
               image: "{{ .Values.kubectl.image.repository }}:{{ $kubectlTag }}"
               imagePullPolicy: {{ .Values.kubectl.image.pullPolicy }}
+              {{- if .Values.kubectl.env }}
+              env:
+              {{- range $k, $v := .Values.kubectl.env }}
+                - name: {{ $k }}
+                  value: {{ $v | quote }}
+              {{- end }}
+              {{- end }}
               command:
                 - /bin/sh
                 - -ec
