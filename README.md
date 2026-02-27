@@ -24,6 +24,31 @@ pwsh ./scripts/package-helm-chart.ps1 -ChartPath charts-src/new-api -Destination
 pwsh ./scripts/package-helm-chart.ps1 -ChartPath charts-src/new-api -Destination docs -UpdateIndex -SourceMode GitHead
 ```
 
+## 统一增量发布脚本（适用于所有 chart）
+
+仓库提供通用发布脚本（默认按 patch 递增版本并打包）：
+
+```powershell
+pwsh ./scripts/release-helm-chart.ps1 -Project charts-src/new-api
+```
+
+也支持只传项目名（会自动解析到 `charts-src/<name>`）：
+
+```powershell
+pwsh ./scripts/release-helm-chart.ps1 -Project new-api
+```
+
+常用参数：
+
+- `-Project`：项目名或路径（推荐相对路径）
+- `-Bump patch|minor|major|none`：版本增量策略（默认 `patch`）
+- `-Version x.y.z`：显式指定版本（优先级高于 `-Bump`）
+- `-SourceMode WorkingTree|GitHead`：打包来源（默认 `WorkingTree`）
+- `-NoUpdateIndex`：不更新 `docs/index.yaml`
+- `-DryRun`：只解析/预览，不改文件
+
+给 AI 的约定：当需要发布当前编辑项目时，始终显式传入 `-Project`（优先用相对路径，如 `charts-src/new-api`），保证是增量发布，不删除历史 `.tgz`。
+
 ## 一键校验 tgz 是否含 `^M`
 
 默认校验 `docs` 下所有 `.tgz`：
