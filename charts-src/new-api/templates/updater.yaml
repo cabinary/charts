@@ -14,11 +14,8 @@ metadata:
     app: {{ include "newapi.name" . }}
 rules:
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["statefulsets"]
     verbs: ["get", "list", "watch", "patch", "update"]
-  - apiGroups: ["apps"]
-    resources: ["replicasets"]
-    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
@@ -81,14 +78,24 @@ spec:
                 - /bin/sh
                 - -ec
                 - |
-                  DEPLOYMENT="{{ include "newapi.fullname" . }}"
                   NAMESPACE="{{ .Release.Namespace }}"
                   TIMEOUT="{{ .Values.updater.rolloutTimeoutSeconds | default 300 }}s"
 
-                  kubectl -n "$NAMESPACE" rollout restart deployment/$DEPLOYMENT
-                  if ! kubectl -n "$NAMESPACE" rollout status deployment/$DEPLOYMENT --timeout="$TIMEOUT"; then
-                    kubectl -n "$NAMESPACE" rollout undo deployment/$DEPLOYMENT
-                    kubectl -n "$NAMESPACE" rollout status deployment/$DEPLOYMENT --timeout="$TIMEOUT"
-                    exit 1
-                  fi
+                  rollout_statefulset() {
+                    name="$1"
+                    kubectl -n "$NAMESPACE" rollout restart "statefulset/$name"
+                    if ! kubectl -n "$NAMESPACE" rollout status "statefulset/$name" --timeout="$TIMEOUT"; then
+                      kubectl -n "$NAMESPACE" rollout undo "statefulset/$name"
+                      kubectl -n "$NAMESPACE" rollout status "statefulset/$name" --timeout="$TIMEOUT"
+                      return 1
+                    fi
+                  }
+
+                  {{- if .Values.cluster.enabled }}
+                  # 主节点先完成迁移并稳定运行，再更新从节点。
+                  rollout_statefulset "{{ include "newapi.masterStatefulSetName" . }}"
+                  rollout_statefulset "{{ include "newapi.slaveStatefulSetName" . }}"
+                  {{- else }}
+                  rollout_statefulset "{{ include "newapi.fullname" . }}"
+                  {{- end }}
 {{- end }}

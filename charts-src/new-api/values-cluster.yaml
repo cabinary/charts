@@ -1,0 +1,59 @@
+# New API 主从集群示例。生产环境请固定镜像版本。
+image:
+  tag: "latest"
+
+cluster:
+  enabled: true
+  master:
+    replicas: 1
+  slave:
+    replicas: 2
+
+# 所有应用节点必须连接同一个稳定、可写的 PostgreSQL 入口。
+database:
+  usePostgres: true
+  host: "postgres.example.internal"
+  port: 5432
+  database: "newapi"
+  params: "sslmode=require"
+  auth:
+    username: "newapi"
+    password: ""
+    existingSecret:
+      name: "new-api-database"
+      key: "password"
+
+# 此示例使用所有节点共享的外部 Redis 单一端点。
+redis:
+  enabled: false
+  host: "redis.example.internal"
+  port: 6379
+  scheme: redis
+  auth:
+    enabled: true
+    password: ""
+    existingSecret:
+      name: "new-api-redis"
+      key: "password"
+
+env:
+  TZ: "Asia/Shanghai"
+  ERROR_LOG_ENABLED: "true"
+  BATCH_UPDATE_ENABLED: "true"
+  STREAMING_TIMEOUT: "300"
+  SYNC_FREQUENCY: "60"
+
+# Secret 必须同时包含 SESSION_SECRET 和 CRYPTO_SECRET，且供所有节点共用。
+envFromSecret:
+  name: "new-api-cluster"
+  keys:
+    SESSION_SECRET: "SESSION_SECRET"
+    CRYPTO_SECRET: "CRYPTO_SECRET"
+
+# 使用 latest 或需要定时拉取镜像时，可启用顺序更新：master 成功后才更新 slave。
+updater:
+  enabled: false
+
+# 集群默认不挂载本地日志 PVC，建议使用日志数据库或集中式日志系统。
+mountLogs:
+  enabled: false

@@ -51,7 +51,7 @@ istio:
     labels:
       team: platform
 
-# 定时更新（按 Cron 重启 Deployment 并校验，不健康自动回滚）
+# 定时更新（按 Cron 重启 StatefulSet 并校验，不健康自动回滚）
 updater:
   enabled: true
   schedule: "0 */6 * * *"

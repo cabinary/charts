@@ -1,5 +1,17 @@
-# Deployment 副本数
+# 单机模式副本数（cluster.enabled=false 时生效）
 replicaCount: 1
+
+# 主从集群配置
+cluster:
+  # true: 创建 1 个 master StatefulSet 和 1 个 slave StatefulSet
+  # false: 创建单个 StatefulSet，保持原有单机部署方式
+  enabled: false
+  master:
+    # New API 集群只能有 1 个 master
+    replicas: 1
+  slave:
+    # slave 副本数；启用集群时至少为 1
+    replicas: 2
 
 # 应用镜像配置
 image:
@@ -108,6 +120,7 @@ paths:
   logsSubPath: logs
 
 # 应用环境变量（会注入到容器 env）
+# NODE_TYPE 由 chart 根据 master/slave 角色管理，不应在此覆盖
 env:
   # 若填写此项，将优先使用外部 Redis 连接串
   # REDIS_CONN_STRING: "redis://redis"
@@ -116,12 +129,14 @@ env:
   BATCH_UPDATE_ENABLED: "true"
   STREAMING_TIMEOUT: "300"
   # SESSION_SECRET: "random_string"
+  # CRYPTO_SECRET: "random_string"
   # SYNC_FREQUENCY: "60"
   # GOOGLE_ANALYTICS_ID: "G-XXXXXXXXXX"
   # UMAMI_WEBSITE_ID: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
   # UMAMI_SCRIPT_URL: "https://analytics.umami.is/script.js"
 
-# 机密环境变量（例如 SESSION_SECRET）建议统一从已存在的 Secret 注入
+# 机密环境变量建议统一从已存在的 Secret 注入
+# 集群模式下 SESSION_SECRET 和 CRYPTO_SECRET 必须由 env 或此 Secret 提供
 envFromSecret:
   # 已存在的 Secret 名称；为空则不注入
   name: ""
@@ -129,8 +144,10 @@ envFromSecret:
   # key 为空时会默认使用同名 key
   keys:
     SESSION_SECRET: "SESSION_SECRET"
+    # CRYPTO_SECRET: "CRYPTO_SECRET"
 
-# 定时更新（重启 Deployment 以拉取最新镜像；失败自动回滚）
+# 定时更新（重启 StatefulSet 以拉取最新镜像；失败自动回滚）
+# 集群模式下严格按 master -> slave 顺序滚动
 updater:
   enabled: false
   # Cron 表达式，默认每天 03:00 执行一次
