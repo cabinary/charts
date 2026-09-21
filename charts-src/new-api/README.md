@@ -42,12 +42,47 @@ helm upgrade --install new-api ./charts-src/new-api `
 ## 更新顺序
 
 官方建议先更新 master，确认数据库迁移和运行状态稳定后再更新 slave。启用 `updater.enabled`
-后，CronJob 会按 `new-api-master` 到 `new-api-slave` 的顺序执行滚动更新；任一 StatefulSet
-失败时会回滚该 StatefulSet 并停止后续更新。
+后，CronJob 会按 `new-api-master` 到 `new-api-slave` 的顺序执行滚动更新；master 失败时回滚
+master 并退出，不再更新 slave。
+
+updater 对每个 StatefulSet 的处理流程：
+
+1. 记录该 StatefulSet 中 Ready Pod 正在运行的镜像 digest，作为回滚目标。
+2. 用一次 patch 同时刷新 `restartedAt` 注解并把镜像恢复为 `image.repository:image.tag`（清除上次
+   回滚钉住的 digest），然后等待至多 `updater.rolloutTimeoutSeconds`。
+3. 超时后把模板钉回步骤 1 的 digest（找不到 Ready Pod 时退回 `kubectl rollout undo`），并删除仍未
+   Ready 的 Pod。StatefulSet 不会主动替换一个从未 Ready 的 Pod，必须删除它，控制器才会用回退后
+   的模板重建，这也是 Kubernetes 文档中 StatefulSet「Forced Rollback」的步骤。
+4. 再次等待 rollout 完成，然后以失败状态退出，便于 Job 失败告警。
+
+使用 `latest` 时只能回滚到「上一次实际运行的 digest」，无法回滚到指定版本号，生产环境建议固定
+`image.tag`。Job 总超时 `updater.activeDeadlineSeconds` 默认按 StatefulSet 数量自动计算，避免回滚
+阶段被 Job 超时打断。
 
 直接通过 `helm upgrade` 修改镜像或 Pod 模板时，Kubernetes 可能同时开始两个 StatefulSet 的
 滚动更新。此类生产变更应安排维护窗口；使用 `latest` 且仅需拉取新镜像时，优先使用 updater
 执行顺序重启。
+
+## 告警
+
+`monitoring.prometheusRule.enabled=true` 会创建 PrometheusRule（需要 Prometheus Operator 的 CRD，
+ACK 的 ARMS Prometheus 已内置），包含以下规则：
+
+| 告警 | 触发条件 |
+| --- | --- |
+| `NewApiStatefulSetNotReady` | Ready 副本数低于期望值持续 `notReadyFor`（默认 15m） |
+| `NewApiPodCrashLooping` | 单个应用 Pod 1 小时内重启超过 `restartThreshold`（默认 5）次 |
+| `NewApiUpdaterJobFailed` | updater Job 失败（仅 `updater.enabled=true` 时渲染） |
+
+集群模式下 slave 仍能承接流量，master 停摆不会体现在对外可用性上，但只有 master 执行的后台任务
+（订阅额度重置、数据看板等）会停止，建议至少开启第一条规则。若 Operator 通过 `ruleSelector`
+按 label 选择规则，用 `monitoring.prometheusRule.labels` 补充。
+
+## 从 0.3.0 升级
+
+0.3.1 为 updater 的 Role 新增 `controllerrevisions` 读权限和 `pods` 删除权限；此前
+`rollout undo` 会因缺少前者而失败。`updater.activeDeadlineSeconds` 改为默认自动计算
+（集群模式 1320 秒），显式设置过该值的 values 不受影响。
 
 ## 从 0.2.x 升级
 

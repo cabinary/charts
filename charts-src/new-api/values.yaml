@@ -147,7 +147,10 @@ envFromSecret:
     # CRYPTO_SECRET: "CRYPTO_SECRET"
 
 # 定时更新（重启 StatefulSet 以拉取最新镜像；失败自动回滚）
-# 集群模式下严格按 master -> slave 顺序滚动
+# 集群模式下严格按 master -> slave 顺序滚动，master 失败时不再更新 slave。
+# 回滚策略：重启前记录 Ready Pod 正在运行的镜像 digest，超时后把模板钉回该 digest，
+# 并删除一直未 Ready 的 Pod（StatefulSet Forced Rollback），使控制器用回退后的模板重建。
+# 下一次运行开始时会先把镜像恢复为 image.repository:image.tag，再触发重启。
 updater:
   enabled: false
   # Cron 表达式，默认每天 03:00 执行一次
@@ -158,8 +161,26 @@ updater:
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
   backoffLimit: 0
-  activeDeadlineSeconds: 600
+  # 单个 StatefulSet 一次 rollout（或一次回滚）的等待上限
   rolloutTimeoutSeconds: 300
+  # 整个 Job 的运行上限；0 表示自动计算：
+  # StatefulSet 数量 x 2（更新 + 回滚）x rolloutTimeoutSeconds + 120
+  activeDeadlineSeconds: 0
+
+# 可选告警规则（PrometheusRule CRD，需要集群已安装 Prometheus Operator，
+# 例如 ACK 的 ARMS Prometheus 或 kube-prometheus-stack）
+monitoring:
+  prometheusRule:
+    enabled: false
+    apiVersion: monitoring.coreos.com/v1
+    # 规则所在 namespace；为空则使用 release namespace
+    namespace: ""
+    # 供 Prometheus Operator 的 ruleSelector 匹配的额外 labels，例如 release: kube-prometheus-stack
+    labels: {}
+    # StatefulSet Ready 副本数低于期望值多久后告警
+    notReadyFor: "15m"
+    # Pod 1 小时内重启次数超过该值时告警
+    restartThreshold: 5
 
 # updater 专用 kubectl 镜像配置（与应用镜像解耦，避免镜像源配置耦合导致崩溃）
 kubectl:

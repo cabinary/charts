@@ -1,0 +1,54 @@
+{{- if .Values.monitoring.prometheusRule.enabled }}
+{{- $pr := .Values.monitoring.prometheusRule }}
+{{- $ns := .Release.Namespace }}
+{{- $fullname := include "newapi.fullname" . }}
+{{- $stsRegex := ternary (printf "^(%s|%s)$" (include "newapi.masterStatefulSetName" .) (include "newapi.slaveStatefulSetName" .)) (printf "^%s$" $fullname) .Values.cluster.enabled }}
+{{- $podRegex := ternary (printf "^%s-(master|slave)-[0-9]+$" $fullname) (printf "^%s-[0-9]+$" $fullname) .Values.cluster.enabled }}
+{{- $notReadyFor := $pr.notReadyFor | default "15m" }}
+{{- $restartThreshold := $pr.restartThreshold | default 5 }}
+apiVersion: {{ $pr.apiVersion | default "monitoring.coreos.com/v1" }}
+kind: PrometheusRule
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ $pr.namespace | default $ns }}
+  labels:
+    app: {{ include "newapi.name" . }}
+    {{- with $pr.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ $fullname }}.rules
+      rules:
+        - alert: NewApiStatefulSetNotReady
+          expr: |
+            kube_statefulset_status_replicas_ready{namespace="{{ $ns }}", statefulset=~"{{ $stsRegex }}"}
+              < kube_statefulset_replicas{namespace="{{ $ns }}", statefulset=~"{{ $stsRegex }}"}
+          for: {{ $notReadyFor }}
+          labels:
+            severity: critical
+          annotations:
+            summary: "New API StatefulSet {{ "{{ $labels.statefulset }}" }} 有副本未 Ready"
+            description: "{{ "{{ $labels.namespace }}" }}/{{ "{{ $labels.statefulset }}" }} 已持续 {{ $notReadyFor }} 未达到期望副本数。master 不可用时订阅额度重置、数据看板等后台任务不会执行。"
+        - alert: NewApiPodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="{{ $ns }}", container="new-api", pod=~"{{ $podRegex }}"}[1h])
+              > {{ $restartThreshold }}
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "New API Pod {{ "{{ $labels.pod }}" }} 反复重启"
+            description: "{{ "{{ $labels.namespace }}" }}/{{ "{{ $labels.pod }}" }} 最近 1 小时重启超过 {{ $restartThreshold }} 次，通常是探针持续失败。"
+        {{- if .Values.updater.enabled }}
+        - alert: NewApiUpdaterJobFailed
+          expr: |
+            kube_job_status_failed{namespace="{{ $ns }}", job_name=~"^{{ include "newapi.updater.cronJobName" . }}-.*"} > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "New API updater 任务失败"
+            description: "{{ "{{ $labels.namespace }}" }}/{{ "{{ $labels.job_name }}" }} 执行失败，请查看 Job 日志确认是否已回滚。"
+        {{- end }}
+{{- end }}

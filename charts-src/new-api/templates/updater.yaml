@@ -1,4 +1,11 @@
 {{- if .Values.updater.enabled }}
+{{- $imageTag := default .Chart.AppVersion .Values.image.tag }}
+{{- $imageRef := printf "%s:%s" .Values.image.repository $imageTag }}
+{{- $rolloutTimeout := int (.Values.updater.rolloutTimeoutSeconds | default 300) }}
+{{- $stsCount := ternary 2 1 .Values.cluster.enabled }}
+{{- /* 每个 StatefulSet 最多经历一次更新 + 一次回滚，再留 120s 给 kubectl 调用本身 */}}
+{{- $autoDeadline := add (mul $stsCount 2 $rolloutTimeout) 120 }}
+{{- $deadline := .Values.updater.activeDeadlineSeconds | default $autoDeadline }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -16,9 +23,14 @@ rules:
   - apiGroups: ["apps"]
     resources: ["statefulsets"]
     verbs: ["get", "list", "watch", "patch", "update"]
+  # kubectl rollout undo / history 需要读取 ControllerRevision
+  - apiGroups: ["apps"]
+    resources: ["controllerrevisions"]
+    verbs: ["get", "list", "watch"]
+  # 回滚时需要删除一直未 Ready 的 Pod，StatefulSet 才会用回退后的模板重建它
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -51,9 +63,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: {{ .Values.updater.backoffLimit | default 0 }}
-      {{- if .Values.updater.activeDeadlineSeconds }}
-      activeDeadlineSeconds: {{ .Values.updater.activeDeadlineSeconds }}
-      {{- end }}
+      activeDeadlineSeconds: {{ $deadline }}
       template:
         metadata:
           labels:
@@ -79,23 +89,99 @@ spec:
                 - -ec
                 - |
                   NAMESPACE="{{ .Release.Namespace }}"
-                  TIMEOUT="{{ .Values.updater.rolloutTimeoutSeconds | default 300 }}s"
+                  TIMEOUT="{{ $rolloutTimeout }}s"
+                  APP_LABEL="{{ include "newapi.name" . }}"
+                  CONTAINER="new-api"
+                  IMAGE_REPO="{{ .Values.image.repository }}"
+                  IMAGE_REF="{{ $imageRef }}"
+
+                  log() {
+                    echo "[updater] $(date -u +%Y-%m-%dT%H:%M:%SZ) $*"
+                  }
+
+                  # 输出：<pod名>|<镜像 imageID>|<Ready 状态>，每行一个 Pod
+                  pods_of() {
+                    kubectl -n "$NAMESPACE" get pods \
+                      -l "app=$APP_LABEL,component=application,role=$1" \
+                      -o jsonpath='{range .items[*]}{.metadata.name}{"|"}{.status.containerStatuses[?(@.name=="new-api")].imageID}{"|"}{.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}'
+                  }
+
+                  # 取一个 Ready Pod 当前实际运行的镜像 digest，作为回滚目标。
+                  # 使用 latest 这类浮动 tag 时，rollout undo 回退的模板仍会拉到新镜像，
+                  # 只有按 digest 钉住才是真正的回滚。
+                  current_digest() {
+                    pods_of "$1" | while IFS='|' read -r name image ready; do
+                      [ "$ready" = "True" ] || continue
+                      [ -n "$image" ] || continue
+                      case "$image" in
+                        *@*) echo "$image" ;;
+                        *) echo "${IMAGE_REPO}@${image}" ;;
+                      esac
+                      break
+                    done
+                  }
+
+                  # 一次 patch 同时改镜像和 restartedAt，只产生一个 ControllerRevision
+                  set_template_image() {
+                    kubectl -n "$NAMESPACE" patch "statefulset/$1" --type strategic \
+                      -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"kubectl.kubernetes.io/restartedAt\":\"$3\"}},\"spec\":{\"containers\":[{\"name\":\"$CONTAINER\",\"image\":\"$2\"}]}}}}"
+                  }
+
+                  # StatefulSet 不会替换一个从未 Ready 的 Pod（OrderedReady 会卡住整个更新），
+                  # 官方 Forced Rollback 流程要求手动删除它，控制器才会用回退后的模板重建。
+                  delete_unready_pods() {
+                    pods_of "$1" | while IFS='|' read -r name image ready; do
+                      [ -n "$name" ] || continue
+                      [ "$ready" = "True" ] && continue
+                      log "deleting not-ready pod $name so the StatefulSet controller recreates it"
+                      kubectl -n "$NAMESPACE" delete pod "$name" --wait=false --ignore-not-found
+                    done
+                  }
 
                   rollout_statefulset() {
                     name="$1"
-                    kubectl -n "$NAMESPACE" rollout restart "statefulset/$name"
-                    if ! kubectl -n "$NAMESPACE" rollout status "statefulset/$name" --timeout="$TIMEOUT"; then
-                      kubectl -n "$NAMESPACE" rollout undo "statefulset/$name"
-                      kubectl -n "$NAMESPACE" rollout status "statefulset/$name" --timeout="$TIMEOUT"
-                      return 1
+                    role="$2"
+                    previous="$(current_digest "$role" || true)"
+                    now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+                    if [ -n "$previous" ]; then
+                      log "$name: currently running $previous"
+                    else
+                      log "$name: no Ready pod found, digest rollback unavailable; will fall back to rollout undo"
                     fi
+
+                    # 同时把可能被上次回滚钉住的 digest 恢复成浮动 tag
+                    log "$name: restarting with image $IMAGE_REF"
+                    set_template_image "$name" "$IMAGE_REF" "$now"
+                    if kubectl -n "$NAMESPACE" rollout status "statefulset/$name" --timeout="$TIMEOUT"; then
+                      log "$name: rollout finished"
+                      return 0
+                    fi
+
+                    log "$name: rollout did not finish within $TIMEOUT, rolling back"
+                    if [ -n "$previous" ]; then
+                      set_template_image "$name" "$previous" "$now"
+                    else
+                      kubectl -n "$NAMESPACE" rollout undo "statefulset/$name"
+                    fi
+                    delete_unready_pods "$role"
+                    if kubectl -n "$NAMESPACE" rollout status "statefulset/$name" --timeout="$TIMEOUT"; then
+                      log "$name: rolled back to ${previous:-previous revision}"
+                    else
+                      log "$name: rollback did not finish within $TIMEOUT, manual intervention required"
+                    fi
+                    return 1
                   }
 
                   {{- if .Values.cluster.enabled }}
-                  # 主节点先完成迁移并稳定运行，再更新从节点。
-                  rollout_statefulset "{{ include "newapi.masterStatefulSetName" . }}"
-                  rollout_statefulset "{{ include "newapi.slaveStatefulSetName" . }}"
+                  # 主节点先完成迁移并稳定运行，再更新从节点；master 失败则不碰 slave。
+                  rollout_statefulset "{{ include "newapi.masterStatefulSetName" . }}" master || {
+                    log "master update failed, slave StatefulSet left untouched"
+                    exit 1
+                  }
+                  rollout_statefulset "{{ include "newapi.slaveStatefulSetName" . }}" slave || exit 1
                   {{- else }}
-                  rollout_statefulset "{{ include "newapi.fullname" . }}"
+                  rollout_statefulset "{{ include "newapi.fullname" . }}" master || exit 1
                   {{- end }}
+                  log "all StatefulSets updated"
 {{- end }}

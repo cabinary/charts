@@ -1,4 +1,5 @@
-# New API 主从集群示例。生产环境请固定镜像版本。
+# New API 主从集群示例。生产环境请固定镜像版本，例如 tag: "v1.0.0-rc.39"。
+# 使用 latest 时，updater 只能按运行中的镜像 digest 回滚，无法回滚到某个具体版本号。
 image:
   tag: "latest"
 
@@ -51,8 +52,16 @@ envFromSecret:
     CRYPTO_SECRET: "CRYPTO_SECRET"
 
 # 使用 latest 或需要定时拉取镜像时，可启用顺序更新：master 成功后才更新 slave。
+# master 更新失败会按 digest 回滚并删除未 Ready 的 Pod，slave 保持不动。
 updater:
   enabled: false
+
+# 建议同时开启告警：master 长时间未 Ready 或 updater 失败时通知，
+# 避免 slave 仍在承接流量而 master 已停摆多日无人察觉。
+monitoring:
+  prometheusRule:
+    enabled: false
+    labels: {}
 
 # 集群默认不挂载本地日志 PVC，建议使用日志数据库或集中式日志系统。
 mountLogs:

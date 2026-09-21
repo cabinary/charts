@@ -83,10 +83,12 @@ helm -n default history new-api
 
 ```powershell
 helm -n default rollback new-api 1
-kubectl -n default rollout status deploy/new-api --timeout=300s
+kubectl -n default rollout status statefulset/new-api --timeout=300s
 ```
 
-说明：`updater` 任务内已实现“更新失败自动 `rollout undo`”。这里的 Helm 回滚用于发布级别问题恢复。
+说明：`updater` 任务内已实现「更新超时自动按 digest 回滚并删除未 Ready 的 Pod」，回滚后 Job 以失败
+状态退出。这里的 Helm 回滚用于发布级别问题恢复。若 Pod 反复被探针杀掉但容器内自检正常，先对比 Pod
+内 `/proc/net/arp` 的网关 MAC 与宿主机侧 veth MAC，不一致说明是 CNI 沙箱问题，删除 Pod 重建即可。
 
 ## 7) 常见问题速查
 
